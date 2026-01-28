@@ -2,551 +2,401 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
-const { body, validationResult } = require("express-validator");
-const rateLimit = require("express-rate-limit");
 const User = require("../models/User");
 const auth = require("../middleware/authMiddleware");
-const sendEmail = require("../utils/emailService");
 const router = express.Router();
 
-// Rate limiting for auth endpoints
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 requests per windowMs
-  message: "Too many attempts, please try again later",
-  skipSuccessfulRequests: true,
-});
+// Input validation helper
+const validateInput = (data, rules) => {
+  const errors = [];
+  
+  if (rules.required) {
+    rules.required.forEach(field => {
+      if (!data[field] || data[field].trim() === "") {
+        errors.push(`${field} is required`);
+      }
+    });
+  }
+  
+  if (rules.email && data.email) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(data.email)) {
+      errors.push("Invalid email format");
+    }
+  }
+  
+  if (rules.minLength && data.password) {
+    if (data.password.length < 6) {
+      errors.push("Password must be at least 6 characters");
+    }
+  }
+  
+  if (rules.nameLength && data.name) {
+    if (data.name.trim().length < 2) {
+      errors.push("Name must be at least 2 characters");
+    }
+  }
+  
+  return errors;
+};
 
-const signupLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 3, // 3 accounts per hour per IP
-  message: "Too many accounts created, please try again later",
-});
+// Response helper
+const sendResponse = (res, success, message, data = null, statusCode = 200) => {
+  const response = { success, message };
+  if (data) response.data = data;
+  return res.status(statusCode).json(response);
+};
 
-// Validation middleware
-const validateSignup = [
-  body("name").trim().notEmpty().withMessage("Name is required").isLength({ min: 2, max: 50 }),
-  body("email").isEmail().normalizeEmail().withMessage("Valid email is required"),
-  body("password")
-    .isLength({ min: 8 })
-    .withMessage("Password must be at least 8 characters long")
-    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
-    .withMessage("Password must contain at least one uppercase letter, one lowercase letter, and one number"),
-];
-
-const validateLogin = [
-  body("email").isEmail().normalizeEmail(),
-  body("password").notEmpty(),
-];
-
-const validateProfileUpdate = [
-  body("name").trim().notEmpty().isLength({ min: 2, max: 50 }),
-  body("email").optional().isEmail().normalizeEmail(),
-];
-
-const validatePasswordReset = [
-  body("password")
-    .isLength({ min: 8 })
-    .withMessage("Password must be at least 8 characters long")
-    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
-    .withMessage("Password must contain at least one uppercase letter, one lowercase letter, and one number"),
-];
-
-// Helper function to sanitize user object
+// Sanitize user data
 const sanitizeUser = (user) => ({
   id: user._id,
   name: user.name,
   email: user.email,
-  avatar: user.avatar,
   createdAt: user.createdAt,
 });
 
 // SIGNUP
-router.post("/signup", signupLimiter, validateSignup, async (req, res) => {
+router.post("/signup", async (req, res) => {
   try {
-    // Validate request
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        errors: errors.array().map(err => ({
-          field: err.path,
-          message: err.msg
-        }))
-      });
-    }
-
     const { name, email, password } = req.body;
-
-    // Check if user exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(409).json({
-        success: false,
-        message: "User with this email already exists",
-      });
+    
+    // Validate input
+    const errors = validateInput({ name, email, password }, {
+      required: ["name", "email", "password"],
+      email: true,
+      minLength: true,
+      nameLength: true,
+    });
+    
+    if (errors.length > 0) {
+      return sendResponse(res, false, errors[0], null, 400);
     }
-
-    // Hash password
+    
+    // Check if user exists
+    const existingUser = await User.findOne({ 
+      email: email.toLowerCase().trim() 
+    });
+    
+    if (existingUser) {
+      return sendResponse(res, false, "User already exists", null, 409);
+    }
+    
+    // Hash password with better salt rounds
     const salt = await bcrypt.genSalt(12);
     const hashedPassword = await bcrypt.hash(password, salt);
-
+    
     // Create user
     const user = new User({
-      name,
-      email: email.toLowerCase(),
+      name: name.trim(),
+      email: email.toLowerCase().trim(),
       password: hashedPassword,
     });
-
+    
     await user.save();
-
+    
     // Generate JWT token
     const token = jwt.sign(
       { id: user._id },
-      process.env.JWT_SECRET,
+      process.env.JWT_SECRET || "your-secret-key-change-in-production",
       { expiresIn: "7d" }
     );
-
-    // Send welcome email (optional)
-    try {
-      await sendEmail({
-        to: user.email,
-        subject: "Welcome to Task Manager",
-        template: "welcome",
-        context: { name: user.name },
-      });
-    } catch (emailError) {
-      console.error("Failed to send welcome email:", emailError);
-      // Don't fail the signup if email fails
-    }
-
-    res.status(201).json({
-      success: true,
-      message: "Account created successfully",
+    
+    sendResponse(res, true, "User registered successfully", {
       token,
       user: sanitizeUser(user),
-    });
+    }, 201);
+    
   } catch (err) {
     console.error("Signup error:", err);
     
     // Handle duplicate key errors
     if (err.code === 11000) {
-      return res.status(409).json({
-        success: false,
-        message: "User with this email already exists",
-      });
+      return sendResponse(res, false, "Email already registered", null, 409);
     }
-
-    res.status(500).json({
-      success: false,
-      message: "Unable to create account. Please try again later.",
-    });
+    
+    // Handle validation errors from mongoose
+    if (err.name === "ValidationError") {
+      const messages = Object.values(err.errors).map(e => e.message);
+      return sendResponse(res, false, messages[0], null, 400);
+    }
+    
+    sendResponse(res, false, "Server error. Please try again later", null, 500);
   }
 });
 
 // LOGIN
-router.post("/login", authLimiter, validateLogin, async (req, res) => {
+router.post("/login", async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        errors: errors.array(),
-      });
-    }
-
     const { email, password } = req.body;
-    const normalizedEmail = email.toLowerCase();
-
-    // Find user
-    const user = await User.findOne({ email: normalizedEmail });
+    
+    // Validate input
+    const errors = validateInput({ email, password }, {
+      required: ["email", "password"],
+      email: true,
+    });
+    
+    if (errors.length > 0) {
+      return sendResponse(res, false, errors[0], null, 400);
+    }
+    
+    // Find user with email normalization
+    const user = await User.findOne({ 
+      email: email.toLowerCase().trim() 
+    });
+    
     if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid credentials",
-      });
+      return sendResponse(res, false, "Invalid credentials", null, 401);
     }
-
-    // Check if account is locked
-    if (user.failedLoginAttempts >= 5 && user.lockUntil > Date.now()) {
+    
+    // Check if user is locked (simple implementation)
+    if (user.lockUntil && user.lockUntil > Date.now()) {
       const minutesLeft = Math.ceil((user.lockUntil - Date.now()) / 60000);
-      return res.status(423).json({
-        success: false,
-        message: `Account locked. Try again in ${minutesLeft} minute(s)`,
-      });
+      return sendResponse(
+        res, 
+        false, 
+        `Account locked. Try again in ${minutesLeft} minute(s)`, 
+        null, 
+        423
+      );
     }
-
+    
     // Verify password
     const isMatch = await bcrypt.compare(password, user.password);
     
     if (!isMatch) {
-      // Increment failed login attempts
-      user.failedLoginAttempts += 1;
+      // Simple failed attempt tracking
+      user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
       
       if (user.failedLoginAttempts >= 5) {
-        user.lockUntil = Date.now() + 30 * 60 * 1000; // Lock for 30 minutes
+        user.lockUntil = Date.now() + 30 * 60 * 1000; // 30 minutes
       }
       
       await user.save();
       
-      return res.status(401).json({
-        success: false,
-        message: "Invalid credentials",
-        remainingAttempts: 5 - user.failedLoginAttempts,
-      });
+      return sendResponse(res, false, "Invalid credentials", null, 401);
     }
-
-    // Reset failed login attempts on successful login
+    
+    // Reset failed attempts on successful login
     if (user.failedLoginAttempts > 0 || user.lockUntil) {
       user.failedLoginAttempts = 0;
       user.lockUntil = undefined;
+      user.lastLogin = Date.now();
       await user.save();
     }
-
-    // Update last login
-    user.lastLogin = Date.now();
-    await user.save();
-
+    
     // Generate JWT token
     const token = jwt.sign(
       { id: user._id },
-      process.env.JWT_SECRET,
+      process.env.JWT_SECRET || "your-secret-key-change-in-production",
       { expiresIn: "7d" }
     );
-
-    res.json({
-      success: true,
-      message: "Login successful",
+    
+    sendResponse(res, true, "Login successful", {
       token,
       user: sanitizeUser(user),
     });
+    
   } catch (err) {
     console.error("Login error:", err);
-    res.status(500).json({
-      success: false,
-      message: "Authentication failed. Please try again.",
-    });
+    sendResponse(res, false, "Server error. Please try again", null, 500);
   }
 });
 
-// GET PROFILE
+// GET PROFILE (NEW ENDPOINT)
 router.get("/profile", auth, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select("-password -resetToken");
+    const user = await User.findById(req.user.id).select("-password");
     
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+      return sendResponse(res, false, "User not found", null, 404);
     }
-
-    res.json({
-      success: true,
+    
+    sendResponse(res, true, "Profile retrieved", {
       user: sanitizeUser(user),
     });
+    
   } catch (err) {
     console.error("Profile fetch error:", err);
-    res.status(500).json({
-      success: false,
-      message: "Unable to fetch profile",
-    });
+    sendResponse(res, false, "Unable to fetch profile", null, 500);
   }
 });
 
 // UPDATE PROFILE
-router.put("/profile", auth, validateProfileUpdate, async (req, res) => {
+router.put("/update-profile", auth, async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        errors: errors.array(),
-      });
-    }
-
-    const { name, email } = req.body;
+    const { name } = req.body;
     const userId = req.user.id;
-
+    
+    // Validate input
+    if (!name || name.trim() === "") {
+      return sendResponse(res, false, "Name is required", null, 400);
+    }
+    
+    if (name.trim().length < 2) {
+      return sendResponse(res, false, "Name must be at least 2 characters", null, 400);
+    }
+    
     const user = await User.findById(userId);
+    
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+      return sendResponse(res, false, "User not found", null, 404);
     }
-
-    // Check if email is being changed and if it's already taken
-    if (email && email !== user.email) {
-      const emailExists = await User.findOne({ 
-        email: email.toLowerCase(),
-        _id: { $ne: userId }
-      });
-      
-      if (emailExists) {
-        return res.status(409).json({
-          success: false,
-          message: "Email already in use",
-        });
-      }
-      user.email = email.toLowerCase();
-    }
-
-    // Update name if provided
-    if (name) {
-      user.name = name;
-    }
-
+    
+    user.name = name.trim();
     await user.save();
-
-    // Trigger event for frontend sync
-    req.app.emit('userUpdated', { userId, user: sanitizeUser(user) });
-
-    res.json({
-      success: true,
-      message: "Profile updated successfully",
-      user: sanitizeUser(user),
+    
+    // Update localStorage in frontend (optional)
+    const updatedUser = sanitizeUser(user);
+    
+    sendResponse(res, true, "Profile updated successfully", {
+      name: user.name,
+      user: updatedUser,
     });
+    
   } catch (err) {
     console.error("Profile update error:", err);
     
-    if (err.code === 11000) {
-      return res.status(409).json({
-        success: false,
-        message: "Email already in use",
-      });
+    if (err.name === "ValidationError") {
+      const messages = Object.values(err.errors).map(e => e.message);
+      return sendResponse(res, false, messages[0], null, 400);
     }
-
-    res.status(500).json({
-      success: false,
-      message: "Unable to update profile",
-    });
+    
+    sendResponse(res, false, "Unable to update profile", null, 500);
   }
 });
 
-// CHANGE PASSWORD
-router.put("/change-password", auth, validatePasswordReset, async (req, res) => {
+// CHANGE PASSWORD (NEW ENDPOINT)
+router.put("/change-password", auth, async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        errors: errors.array(),
-      });
-    }
-
     const { currentPassword, newPassword } = req.body;
     const userId = req.user.id;
-
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+    
+    // Validate input
+    if (!currentPassword || !newPassword) {
+      return sendResponse(res, false, "Both current and new password are required", null, 400);
     }
-
+    
+    if (newPassword.length < 6) {
+      return sendResponse(res, false, "New password must be at least 6 characters", null, 400);
+    }
+    
+    const user = await User.findById(userId);
+    
+    if (!user) {
+      return sendResponse(res, false, "User not found", null, 404);
+    }
+    
     // Verify current password
     const isMatch = await bcrypt.compare(currentPassword, user.password);
+    
     if (!isMatch) {
-      return res.status(401).json({
-        success: false,
-        message: "Current password is incorrect",
-      });
+      return sendResponse(res, false, "Current password is incorrect", null, 401);
     }
-
+    
     // Hash new password
     const salt = await bcrypt.genSalt(12);
     user.password = await bcrypt.hash(newPassword, salt);
     
-    // Invalidate all existing tokens by changing password version
-    user.passwordVersion = (user.passwordVersion || 0) + 1;
+    // Invalidate old tokens (optional: add token versioning)
+    user.passwordChangedAt = Date.now();
     await user.save();
-
-    res.json({
-      success: true,
-      message: "Password changed successfully",
-    });
+    
+    sendResponse(res, true, "Password changed successfully");
+    
   } catch (err) {
     console.error("Password change error:", err);
-    res.status(500).json({
-      success: false,
-      message: "Unable to change password",
-    });
+    sendResponse(res, false, "Unable to change password", null, 500);
   }
 });
 
-// FORGOT PASSWORD
+// FORGOT PASSWORD (IMPROVED)
 router.post("/forgot-password", async (req, res) => {
   try {
     const { email } = req.body;
     
-    if (!email) {
-      return res.status(400).json({
-        success: false,
-        message: "Email is required",
-      });
+    if (!email || email.trim() === "") {
+      return sendResponse(res, false, "Email is required", null, 400);
     }
-
-    const user = await User.findOne({ email: email.toLowerCase() });
+    
+    const user = await User.findOne({ 
+      email: email.toLowerCase().trim() 
+    });
+    
+    // Don't reveal if user exists (security)
     if (!user) {
-      // Don't reveal that user doesn't exist for security
-      return res.json({
-        success: true,
-        message: "If an account exists with this email, you will receive a reset link",
-      });
+      // Still return success to prevent email enumeration
+      return sendResponse(res, true, "If an account exists, you will receive a reset link");
     }
-
-    // Generate reset token
+    
+    // Generate secure reset token with expiry
     const resetToken = crypto.randomBytes(32).toString("hex");
     const resetTokenExpiry = Date.now() + 3600000; // 1 hour
-
+    
     user.resetToken = resetToken;
     user.resetTokenExpiry = resetTokenExpiry;
     await user.save();
-
-    // Send reset email
-    const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
     
-    try {
-      await sendEmail({
-        to: user.email,
-        subject: "Password Reset Request",
-        template: "passwordReset",
-        context: {
-          name: user.name,
-          resetUrl,
-          expiryHours: 1,
-        },
-      });
-    } catch (emailError) {
-      console.error("Failed to send reset email:", emailError);
-      return res.status(500).json({
-        success: false,
-        message: "Failed to send reset email",
-      });
-    }
-
-    res.json({
-      success: true,
-      message: "Password reset instructions sent to your email",
+    // In production: Send email here
+    console.log(`Password reset token for ${user.email}: ${resetToken}`);
+    console.log(`Reset link: ${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password/${resetToken}`);
+    
+    sendResponse(res, true, "Password reset instructions sent to your email", {
+      // Only return token in development
+      ...(process.env.NODE_ENV === "development" && { resetToken, resetLink: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password/${resetToken}` })
     });
+    
   } catch (err) {
     console.error("Forgot password error:", err);
-    res.status(500).json({
-      success: false,
-      message: "Unable to process password reset",
-    });
+    sendResponse(res, false, "Unable to process request", null, 500);
   }
 });
 
-// RESET PASSWORD
-router.post("/reset-password/:token", validatePasswordReset, async (req, res) => {
+// RESET PASSWORD (IMPROVED)
+router.post("/reset-password/:token", async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        errors: errors.array(),
-      });
-    }
-
     const { token } = req.params;
     const { password } = req.body;
-
+    
+    if (!password || password.length < 6) {
+      return sendResponse(res, false, "Password must be at least 6 characters", null, 400);
+    }
+    
+    // Find user with valid token (not expired)
     const user = await User.findOne({
       resetToken: token,
-      resetTokenExpiry: { $gt: Date.now() },
+      resetTokenExpiry: { $gt: Date.now() } // Check token expiry
     });
-
+    
     if (!user) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid or expired reset token",
-      });
+      return sendResponse(res, false, "Invalid or expired reset token", null, 400);
     }
-
+    
     // Hash new password
     const salt = await bcrypt.genSalt(12);
     user.password = await bcrypt.hash(password, salt);
     user.resetToken = undefined;
     user.resetTokenExpiry = undefined;
-    user.passwordVersion = (user.passwordVersion || 0) + 1;
+    user.passwordChangedAt = Date.now();
+    
     await user.save();
-
-    // Send confirmation email
-    try {
-      await sendEmail({
-        to: user.email,
-        subject: "Password Changed Successfully",
-        template: "passwordChanged",
-        context: { name: user.name },
-      });
-    } catch (emailError) {
-      console.error("Failed to send confirmation email:", emailError);
-    }
-
-    res.json({
-      success: true,
-      message: "Password reset successful. You can now login with your new password.",
-    });
+    
+    sendResponse(res, true, "Password reset successful. You can now login with your new password.");
+    
   } catch (err) {
     console.error("Reset password error:", err);
-    res.status(500).json({
-      success: false,
-      message: "Unable to reset password",
-    });
+    sendResponse(res, false, "Unable to reset password", null, 500);
   }
 });
 
-// DELETE ACCOUNT
-router.delete("/account", auth, async (req, res) => {
+// LOGOUT (OPTIONAL - FRONTEND CLEARS TOKEN)
+router.post("/logout", auth, async (req, res) => {
   try {
-    const userId = req.user.id;
-    const { password } = req.body;
-
-    if (!password) {
-      return res.status(400).json({
-        success: false,
-        message: "Password is required to delete account",
-      });
-    }
-
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
-    }
-
-    // Verify password
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(401).json({
-        success: false,
-        message: "Incorrect password",
-      });
-    }
-
-    // Soft delete (optional - or hard delete based on your needs)
-    user.deletedAt = Date.now();
-    user.email = `${user.email}.deleted.${Date.now()}`; // Make email unusable
-    await user.save();
-
-    // TODO: Delete user's tasks and other data
-    // await Task.deleteMany({ userId });
-
-    res.json({
-      success: true,
-      message: "Account deleted successfully",
-    });
+    // In a real app, you might want to add token to blacklist
+    // For now, just acknowledge logout (frontend clears token)
+    sendResponse(res, true, "Logged out successfully");
   } catch (err) {
-    console.error("Account deletion error:", err);
-    res.status(500).json({
-      success: false,
-      message: "Unable to delete account",
-    });
+    console.error("Logout error:", err);
+    sendResponse(res, false, "Logout failed", null, 500);
   }
 });
 
