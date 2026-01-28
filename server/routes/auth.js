@@ -3,7 +3,7 @@ const bcrypt = require("bcryptjs")
 const jwt = require("jsonwebtoken")
 const crypto = require("crypto")
 const User = require("../models/User")
-
+const auth = require("../middleware/authMiddleware")
 const router = express.Router()
 
 // SIGNUP
@@ -79,6 +79,28 @@ router.post("/login", async (req, res) => {
         email: user.email,
       },
     })
+  } catch (err) {
+    res.status(500).json({ message: err.message })
+  }
+})
+
+// UPDATE PROFILE NAME
+router.put("/update-profile", auth, async (req, res) => {
+  try {
+    const { name } = req.body
+    const userId = req.user.id  // comes from auth middleware
+
+    if (!name) {
+      return res.status(400).json({ message: "Name is required" })
+    }
+
+    const user = await User.findById(userId)
+    if (!user) return res.status(404).json({ message: "User not found" })
+
+    user.name = name
+    await user.save()
+
+    res.json({ message: "Profile updated", name: user.name })
   } catch (err) {
     res.status(500).json({ message: err.message })
   }

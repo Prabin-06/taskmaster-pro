@@ -14,7 +14,7 @@ export default function ForgotPassword() {
     try {
       const res = await api.post("/api/auth/forgot-password", { email })
 
-      // 🚀 Auto redirect to reset page with token
+      // Auto redirect to reset page with token
       navigate(`/reset-password/${res.data.resetToken}`)
     } catch (err) {
       setMessage(err.response?.data?.message || "Error sending reset link")

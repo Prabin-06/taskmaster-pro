@@ -5,6 +5,7 @@ import Dashboard from "./pages/Dashboard"
 import ProtectedRoute from "./components/ProtectedRoute"
 import ForgotPassword from "./pages/ForgotPassword"
 import ResetPassword from "./pages/ResetPassword"
+import Profile from "./pages/Profile"
 
 
 function AppContent() {
@@ -40,6 +41,13 @@ function AppContent() {
               token ? <Navigate to="/dashboard" replace /> : <Signup />
             }
           />
+
+          {/* Profile */}
+          <Route 
+            path="/profile" 
+            element={<Profile />} 
+          />
+
 
           {/* Redirect everything else to dashboard */}
           <Route
