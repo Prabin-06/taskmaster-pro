@@ -16,7 +16,9 @@ export default function Dashboard() {
 
   const navigate = useNavigate()
 
-  /* AUTH CHECK */
+  /* =====================
+     AUTH CHECK FIRST
+  ====================== */
   useEffect(() => {
     const token = localStorage.getItem("token")
     const storedUser = localStorage.getItem("user")
@@ -26,28 +28,32 @@ export default function Dashboard() {
       return
     }
 
-    if (storedUser) setUser(JSON.parse(storedUser))
+    if (storedUser) {
+      setUser(JSON.parse(storedUser))
+    }
+
     setReady(true)
   }, [navigate])
 
-  /* 🔄 LIVE USER SYNC (when name changes in profile) */
+  /* 🔴 LIVE USER SYNC */
   useEffect(() => {
     const syncUser = () => {
       const storedUser = localStorage.getItem("user")
       if (storedUser) setUser(JSON.parse(storedUser))
     }
-
     window.addEventListener("userUpdated", syncUser)
     return () => window.removeEventListener("userUpdated", syncUser)
   }, [])
 
-  /* FETCH TASKS */
+  /* =====================
+     FETCH TASKS
+  ====================== */
   const fetchTasks = async () => {
     try {
       setLoading(true)
       const res = await api.get("/api/task/my")
       setTasks(res.data || [])
-    } catch {
+    } catch (err) {
       setError("Failed to load tasks")
     } finally {
       setLoading(false)
@@ -55,10 +61,13 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    if (ready) fetchTasks()
+    if (!ready) return
+    fetchTasks()
   }, [ready])
 
-  /* ADD TASK */
+  /* =====================
+     ADD TASK
+  ====================== */
   const addTask = async (e) => {
     e.preventDefault()
     if (!title.trim()) return
@@ -135,7 +144,7 @@ export default function Dashboard() {
 
           <div className="flex items-center gap-4 mt-4 md:mt-0">
 
-            {/* 🟣 Avatar */}
+            {/* Avatar */}
             <Link to="/profile">
               <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white flex items-center justify-center font-bold shadow-md hover:scale-105 transition">
                 {user?.name ? user.name.charAt(0).toUpperCase() : "U"}
@@ -165,7 +174,10 @@ export default function Dashboard() {
               Logout
             </button>
 
-            <Link to="/profile" className="text-sm text-amber-600 hover:text-amber-500 hover:underline">
+            <Link
+              to="/profile"
+              className="text-sm text-amber-600 hover:text-amber-500 hover:underline"
+            >
               Profile
             </Link>
           </div>
@@ -184,11 +196,94 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* TASK UI (unchanged styling below) */}
-        {/* ADD TASK + TASK LIST + STATS remain exactly as your version */}
-        {/* ⬇️ I did NOT remove or simplify anything */}
+        {/* CONTENT */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-        {/* --- KEEP REST OF YOUR ORIGINAL TASK UI HERE EXACTLY --- */}
+          {/* ADD TASK CARD */}
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+            <div className="p-8">
+              <h2 className="text-2xl font-bold text-gray-800 mb-6">Add New Task</h2>
+
+              <form onSubmit={addTask} className="space-y-6">
+                <input
+                  type="text"
+                  placeholder="What needs to be done?"
+                  value={title}
+                  onChange={e => setTitle(e.target.value)}
+                  className="w-full p-4 border-2 border-gray-100 rounded-xl focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
+                />
+
+                <div className="grid grid-cols-2 gap-4">
+                  <select value={priority} onChange={e => setPriority(e.target.value)} className="p-4 border rounded-xl">
+                    <option>Low</option>
+                    <option>Medium</option>
+                    <option>High</option>
+                  </select>
+
+                  <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="p-4 border rounded-xl" />
+                </div>
+
+                <button className="w-full bg-purple-600 text-white py-4 rounded-xl">Add Task</button>
+              </form>
+            </div>
+          </div>
+
+          {/* TASK LIST CARD */}
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+            <div className="p-8">
+              <h2 className="text-2xl font-bold text-gray-800">My Tasks</h2>
+
+              {/* FILTER MENU */}
+              <div className="flex gap-2 bg-gray-100 p-1 rounded-xl mt-4 flex-wrap">
+                {["All", "Pending", "Completed", "High", "Medium", "Low"].map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setFilter(f)}
+                    className={`px-4 py-2 rounded-lg font-medium text-sm ${
+                      filter === f ? "bg-white text-purple-600 shadow-sm" : "text-gray-600"
+                    }`}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
+
+              {loading ? (
+                <p className="mt-6">Loading...</p>
+              ) : filteredTasks.length === 0 ? (
+                <p className="mt-6 text-gray-500">No tasks found</p>
+              ) : (
+                <div className="space-y-3 mt-6 max-h-[400px] overflow-y-auto">
+                  {filteredTasks.map(task => (
+                    <div key={task._id} className="p-4 border rounded-xl flex justify-between items-center">
+                      <div onClick={() => toggleTask(task._id, task.completed)} className="cursor-pointer">
+                        <p className={task.completed ? "line-through text-gray-500" : ""}>{task.title}</p>
+                        <p className="text-sm text-gray-500">{task.priority}</p>
+                      </div>
+                      <button onClick={() => deleteTask(task._id)} className="text-red-500">Delete</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* STATS */}
+        <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-purple-500 text-white p-6 rounded-2xl shadow-lg">
+            <p>Total Tasks</p>
+            <p className="text-3xl font-bold">{tasks.length}</p>
+          </div>
+          <div className="bg-amber-500 text-white p-6 rounded-2xl shadow-lg">
+            <p>Pending</p>
+            <p className="text-3xl font-bold">{pendingTasks}</p>
+          </div>
+          <div className="bg-emerald-500 text-white p-6 rounded-2xl shadow-lg">
+            <p>Completed</p>
+            <p className="text-3xl font-bold">{tasks.filter(t => t.completed).length}</p>
+          </div>
+        </div>
 
       </div>
     </div>
