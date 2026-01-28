@@ -8,12 +8,19 @@ const taskRoutes = require("./routes/task");
 
 const app = express();
 
-/* ================= MIDDLEWARE ================= */
+/* ================= CORS CONFIG ================= */
 app.use(cors({
-  origin: process.env.FRONTEND_URL,
-  credentials: true,
+  origin: [
+    "http://localhost:5173",
+    "https://taskmaster-11rnc0q94-prabin-06s-projects.vercel.app"
+  ],
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  credentials: true
 }));
 
+app.options("*", cors());
+
+/* ================= MIDDLEWARE ================= */
 app.use(express.json());
 
 /* ================= ROUTES ================= */
