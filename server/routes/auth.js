@@ -6,7 +6,7 @@ const User = require("../models/User")
 
 const router = express.Router()
 
-// ✅ SIGNUP
+// SIGNUP
 router.post("/signup", async (req, res) => {
   console.log("SIGNUP BODY RECEIVED:", req.body)
 
@@ -45,7 +45,7 @@ router.post("/signup", async (req, res) => {
 })
 
 
-// ✅ LOGIN
+// LOGIN
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body
@@ -85,7 +85,7 @@ router.post("/login", async (req, res) => {
 })
 
 
-// 🔑 FORGOT PASSWORD
+// FORGOT PASSWORD
 router.post("/forgot-password", async (req, res) => {
   try {
     const { email } = req.body
@@ -109,7 +109,7 @@ router.post("/forgot-password", async (req, res) => {
 })
 
 
-// 🔁 RESET PASSWORD
+// RESET PASSWORD
 router.post("/reset-password/:token", async (req, res) => {
   try {
     const { password } = req.body
