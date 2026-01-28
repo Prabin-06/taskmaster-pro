@@ -26,9 +26,12 @@ export default function Profile() {
       setMessage("Profile updated successfully!")
 
       // Update local storage
-      const user = JSON.parse(localStorage.getItem("user"))
-      user.name = name
-      localStorage.setItem("user", JSON.stringify(user))
+      const updatedUser = { ...JSON.parse(localStorage.getItem("user")), name }
+      localStorage.setItem("user", JSON.stringify(updatedUser))
+
+      // Tell other pages user changed
+      window.dispatchEvent(new Event("userUpdated"))
+
     } catch (err) {
       setMessage(err.response?.data?.message || "Update failed")
     }

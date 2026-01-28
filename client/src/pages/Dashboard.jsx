@@ -32,6 +32,17 @@ export default function Dashboard() {
 
     setReady(true)
   }, [navigate])
+  /* SYNC USER ON UPDATE */
+  useEffect(() => {
+    const syncUser = () => {
+      const storedUser = localStorage.getItem("user")
+      if (storedUser) setUser(JSON.parse(storedUser))
+    }
+
+    window.addEventListener("userUpdated", syncUser)
+    return () => window.removeEventListener("userUpdated", syncUser)
+  }, [])
+
 
   /* FETCH TASKS */
   const fetchTasks = async () => {
@@ -116,6 +127,15 @@ export default function Dashboard() {
           </div>
 
           <div className="flex items-center gap-4 mt-4 md:mt-0">
+
+            {/* Avatar */}
+
+            <Link to="/profile">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white flex items-center justify-center font-bold shadow-md hover:scale-105 transition">
+                {user?.name ? user.name.charAt(0).toUpperCase() : "U"}
+              </div>
+            </Link>
+
             <input
               type="text"
               placeholder="Search tasks..."
