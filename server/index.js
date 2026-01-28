@@ -10,13 +10,21 @@ const app = express();
 
 /* ================= CORS CONFIG ================= */
 app.use(cors({
-  origin: [
-    "http://localhost:5173",
-    "https://taskmaster-11rnc0q94-prabin-06s-projects.vercel.app"
-  ],
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  credentials: true
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true); // allow non-browser tools
+
+    if (
+      origin.includes("localhost") ||
+      origin.includes("vercel.app")
+    ) {
+      return callback(null, true);
+    }
+
+    callback(new Error("Not allowed by CORS"));
+  },
+  credentials: true,
 }));
+
 
 /* ================= MIDDLEWARE ================= */
 app.use(express.json());
