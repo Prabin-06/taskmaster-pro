@@ -100,7 +100,8 @@ export default function Login() {
                   {showPassword ? "🚫" : "👁️"}
                 </button>
               </div>
-              <div className="text-right -mt-3">
+              
+              <div className="text-right mt-2">
                 <Link
                   to="/forgot-password"
                   className="text-sm text-amber-600 hover:text-amber-500 hover:underline"
