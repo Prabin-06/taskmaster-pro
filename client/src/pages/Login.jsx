@@ -1,4 +1,3 @@
-// pages/Login.jsx
 import { useState } from "react"
 import { useNavigate, Link } from "react-router-dom"
 import api from "../api"
@@ -6,6 +5,7 @@ import api from "../api"
 export default function Login() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false) // 👈 NEW
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const navigate = useNavigate()
@@ -21,15 +21,12 @@ export default function Login() {
         password,
       })
 
-      // 🔐 Save JWT
       localStorage.setItem("token", res.data.token)
 
-      // 👤 Save user (if backend sends it)
       if (res.data.user) {
         localStorage.setItem("user", JSON.stringify(res.data.user))
       }
 
-      // 🚀 Go to dashboard/home
       navigate("/dashboard")
     } catch (err) {
       setError(
@@ -64,6 +61,7 @@ export default function Login() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Email */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Email address
@@ -78,18 +76,30 @@ export default function Login() {
               />
             </div>
 
+            {/* Password with Show/Hide */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Password
               </label>
-              <input
-                type="password"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 bg-white border-2 border-gray-100 rounded-xl focus:border-amber-400 focus:ring-2 focus:ring-amber-200 focus:outline-none transition-all duration-200"
-                required
-              />
+
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-4 py-3 pr-12 bg-white border-2 border-gray-100 rounded-xl focus:border-amber-400 focus:ring-2 focus:ring-amber-200 focus:outline-none transition-all duration-200"
+                  required
+                />
+
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                >
+                  {showPassword ? "🙈" : "👁️"}
+                </button>
+              </div>
             </div>
 
             <button
