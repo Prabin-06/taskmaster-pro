@@ -3,6 +3,9 @@ import Signup from "./pages/Signup"
 import Login from "./pages/Login"
 import Dashboard from "./pages/Dashboard"
 import ProtectedRoute from "./components/ProtectedRoute"
+import ForgotPassword from "./pages/ForgotPassword"
+import ResetPassword from "./pages/ResetPassword"
+
 
 function AppContent() {
   const token = localStorage.getItem("token")
@@ -42,6 +45,18 @@ function AppContent() {
           <Route
             path="*"
             element={<Navigate to="/dashboard" replace />}
+          />
+
+          {/* Forgot Password */}
+          <Route 
+            path="/forgot-password" 
+            element={<ForgotPassword />} 
+          />
+
+          {/* Reset Password */}
+          <Route 
+            path="/reset-password/:token" 
+            element={<ResetPassword />} 
           />
 
         </Routes>

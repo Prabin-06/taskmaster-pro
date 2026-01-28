@@ -5,7 +5,7 @@ import api from "../api"
 export default function Login() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [showPassword, setShowPassword] = useState(false) 
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const navigate = useNavigate()
@@ -100,6 +100,15 @@ export default function Login() {
                   {showPassword ? "🚫" : "👁️"}
                 </button>
               </div>
+              <div className="text-right -mt-3">
+                <Link
+                  to="/forgot-password"
+                  className="text-sm text-amber-600 hover:text-amber-500 hover:underline"
+                >
+                  Forgot Password?
+                </Link>
+              </div>
+
             </div>
 
             <button
