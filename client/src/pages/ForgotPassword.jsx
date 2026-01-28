@@ -5,145 +5,75 @@ import { useNavigate, Link } from "react-router-dom";
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState({ text: "", type: "" });
+  const [message, setMessage] = useState("");
   const [resetToken, setResetToken] = useState("");
-  const [showToken, setShowToken] = useState(false);
 
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!email.trim()) {
-      setMessage({ text: "Please enter your email address", type: "error" });
-      return;
-    }
-
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setMessage({ text: "Please enter a valid email address", type: "error" });
-      return;
-    }
-
-    setLoading(true);
-    setMessage({ text: "", type: "" });
-    setResetToken("");
+    if (!email.trim()) return setMessage("Email is required");
 
     try {
-      const response = await api.post("/api/auth/forgot-password", {
-        email: email.toLowerCase().trim(),
+      setLoading(true);
+      setMessage("");
+
+      const res = await api.post("/api/auth/forgot-password", {
+        email: email.trim().toLowerCase(),
       });
 
-      if (response.data.resetToken) {
-        setResetToken(response.data.resetToken);
-        setMessage({
-          text: "Reset token generated! Use the link below to reset your password.",
-          type: "success",
-        });
-      } else {
-        setMessage({
-          text:
-            response.data.message ||
-            "Password reset instructions sent to your email.",
-          type: "success",
-        });
+      setMessage(res.data.message);
+
+      // Dev-only reset token
+      if (res.data.data?.resetToken) {
+        setResetToken(res.data.data.resetToken);
       }
     } catch (err) {
-      let errorMessage =
-        err.response?.data?.message ||
-        "Error sending reset link. Please try again.";
-
-      if (err.response?.status === 404) {
-        errorMessage = "No account found with this email.";
-      } else if (err.response?.status === 429) {
-        errorMessage = "Too many reset attempts. Please try again later.";
-      }
-
-      setMessage({ text: errorMessage, type: "error" });
+      setMessage(err.response?.data?.message || "Error sending reset link");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleManualReset = () => {
-    if (resetToken) {
-      navigate(`/reset-password/${resetToken}`);
-    }
-  };
-
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(resetToken);
-    setMessage({ text: "Reset token copied!", type: "success" });
-    setTimeout(() => setMessage({ text: "", type: "" }), 2000);
+  const goToReset = () => {
+    if (resetToken) navigate(`/reset-password/${resetToken}`);
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-6">
-          <h1 className="text-2xl font-bold mb-4 text-center">Forgot Password</h1>
+    <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
+      <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-md">
+        <h1 className="text-2xl font-bold mb-6 text-center">Forgot Password</h1>
 
-          {message.text && (
-            <div
-              className={`mb-4 p-3 rounded ${
-                message.type === "success"
-                  ? "bg-green-100 text-green-700"
-                  : "bg-red-100 text-red-700"
-              }`}
-            >
-              {message.text}
-            </div>
-          )}
+        {message && <p className="mb-4 text-center text-sm text-blue-600">{message}</p>}
 
-          {resetToken && (
-            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
-              <p className="text-sm font-semibold mb-2">Dev Reset Token:</p>
-              <div className="flex gap-2">
-                <input
-                  value={resetToken}
-                  readOnly
-                  className="flex-1 border px-2 py-1 rounded text-sm"
-                />
-                <button
-                  onClick={copyToClipboard}
-                  className="px-3 py-1 bg-blue-600 text-white rounded text-sm"
-                >
-                  Copy
-                </button>
-              </div>
-              <button
-                onClick={handleManualReset}
-                className="mt-2 w-full bg-blue-600 text-white py-2 rounded"
-              >
-                Go to Reset Page
-              </button>
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <input
-              type="email"
-              placeholder="Enter your email"
-              className="w-full border p-3 rounded"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-purple-600 text-white py-3 rounded"
-            >
-              {loading ? "Sending..." : "Send Reset Link"}
+        {resetToken && (
+          <div className="mb-4 p-3 bg-gray-100 rounded text-sm break-all">
+            <p><strong>Dev Reset Token:</strong></p>
+            <p>{resetToken}</p>
+            <button onClick={goToReset} className="mt-2 text-blue-600 underline">
+              Go to Reset Page
             </button>
-          </form>
+          </div>
+        )}
 
-          <p className="text-center mt-4 text-sm">
-            Remembered your password?{" "}
-            <Link to="/login" className="text-blue-600 underline">
-              Back to login
-            </Link>
-          </p>
-        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <input
+            type="email"
+            placeholder="Enter your email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full p-3 border rounded-lg"
+          />
+
+          <button disabled={loading} className="w-full bg-purple-600 text-white py-3 rounded-lg">
+            {loading ? "Sending..." : "Send Reset Link"}
+          </button>
+        </form>
+
+        <p className="text-center mt-4 text-sm">
+          Back to <Link to="/login" className="text-blue-600">Login</Link>
+        </p>
       </div>
     </div>
   );

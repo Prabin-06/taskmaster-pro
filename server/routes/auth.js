@@ -1,39 +1,12 @@
 const express = require("express");
-const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const User = require("../models/User");
 const auth = require("../middleware/authMiddleware");
+
 const router = express.Router();
 
-/* =========================
-   HELPERS
-========================= */
-
-const validateInput = (data, rules) => {
-  const errors = [];
-
-  if (rules.required) {
-    rules.required.forEach((field) => {
-      if (!data[field] || data[field].trim() === "") {
-        errors.push(`${field} is required`);
-      }
-    });
-  }
-
-  if (rules.email && data.email) {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(data.email)) errors.push("Invalid email format");
-  }
-
-  if (rules.password && data.password && data.password.length < 6)
-    errors.push("Password must be at least 6 characters");
-
-  if (rules.name && data.name && data.name.trim().length < 2)
-    errors.push("Name must be at least 2 characters");
-
-  return errors;
-};
+/* ================= HELPERS ================= */
 
 const sendResponse = (res, success, message, data = null, status = 200) => {
   const response = { success, message };
@@ -48,76 +21,82 @@ const sanitizeUser = (user) => ({
   createdAt: user.createdAt,
 });
 
-/* =========================
-   SIGNUP
-========================= */
+/* ================= SIGNUP ================= */
 router.post("/signup", async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
-    const errors = validateInput(
-      { name, email, password },
-      { required: ["name", "email", "password"], email: true, password: true, name: true }
-    );
-    if (errors.length) return sendResponse(res, false, errors[0], null, 400);
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
 
     const existingUser = await User.findOne({ email: email.toLowerCase().trim() });
-    if (existingUser) return sendResponse(res, false, "User already exists", null, 409);
+    if (existingUser) {
+      return res.status(409).json({ message: "User already exists" });
+    }
 
-    const hashedPassword = await bcrypt.hash(password, 12);
-
+    // ❗ DO NOT HASH HERE
     const user = await User.create({
       name: name.trim(),
       email: email.toLowerCase().trim(),
-      password: hashedPassword,
+      password: password,
     });
 
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
 
-    sendResponse(res, true, "User registered successfully", {
-      token,
-      user: sanitizeUser(user),
-    }, 201);
+    res.status(201).json({
+      success: true,
+      message: "User registered successfully",
+      data: {
+        token,
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          createdAt: user.createdAt,
+        },
+      },
+    });
+
   } catch (err) {
-    console.error("Signup error:", err);
-    sendResponse(res, false, "Server error", null, 500);
+    console.error("Signup error:", err);   // 👈 THIS will show real error
+    res.status(500).json({ message: "Server error" });
   }
 });
 
-/* =========================
-   LOGIN
-========================= */
+
+/* ================= LOGIN ================= */
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const errors = validateInput(
-      { email, password },
-      { required: ["email", "password"], email: true }
-    );
-    if (errors.length) return sendResponse(res, false, errors[0], null, 400);
+    if (!email || !password)
+      return sendResponse(res, false, "Email and password required", null, 400);
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
-    if (!user) return sendResponse(res, false, "Invalid credentials", null, 401);
+    // ❗ MUST select password manually
+    const user = await User.findOne({ email: email.toLowerCase().trim() }).select("+password +passwordVersion");
+
+    if (!user)
+      return sendResponse(res, false, "Invalid credentials", null, 401);
 
     if (user.lockUntil && user.lockUntil > Date.now()) {
       const minutes = Math.ceil((user.lockUntil - Date.now()) / 60000);
       return sendResponse(res, false, `Account locked. Try again in ${minutes} minutes`, null, 423);
     }
 
-    const isMatch = await bcrypt.compare(password, user.password);
+    const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
-      if (user.failedLoginAttempts >= 5) user.lockUntil = Date.now() + 30 * 60 * 1000;
-      await user.save();
+      await user.incrementFailedAttempts();
       return sendResponse(res, false, "Invalid credentials", null, 401);
     }
 
-    user.failedLoginAttempts = 0;
-    user.lockUntil = undefined;
-    await user.save();
+    await user.resetFailedAttempts();
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
+    const token = jwt.sign(
+      { id: user._id, pv: user.passwordVersion },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
 
     sendResponse(res, true, "Login successful", {
       token,
@@ -129,18 +108,14 @@ router.post("/login", async (req, res) => {
   }
 });
 
-/* =========================
-   GET PROFILE
-========================= */
+/* ================= PROFILE ================= */
 router.get("/profile", auth, async (req, res) => {
-  const user = await User.findById(req.user.id).select("-password");
+  const user = await User.findById(req.user.id);
   if (!user) return sendResponse(res, false, "User not found", null, 404);
   sendResponse(res, true, "Profile retrieved", { user: sanitizeUser(user) });
 });
 
-/* =========================
-   UPDATE PROFILE
-========================= */
+/* ================= UPDATE PROFILE ================= */
 router.put("/update-profile", auth, async (req, res) => {
   const { name } = req.body;
   if (!name || name.trim().length < 2)
@@ -153,66 +128,64 @@ router.put("/update-profile", auth, async (req, res) => {
   sendResponse(res, true, "Profile updated", { user: sanitizeUser(user) });
 });
 
-/* =========================
-   CHANGE PASSWORD
-========================= */
+/* ================= CHANGE PASSWORD ================= */
 router.put("/change-password", auth, async (req, res) => {
   const { currentPassword, newPassword } = req.body;
+
   if (!currentPassword || newPassword.length < 6)
     return sendResponse(res, false, "Invalid password input", null, 400);
 
-  const user = await User.findById(req.user.id);
-  const match = await bcrypt.compare(currentPassword, user.password);
-  if (!match) return sendResponse(res, false, "Current password is incorrect", null, 401);
+  const user = await User.findById(req.user.id).select("+password");
 
-  user.password = await bcrypt.hash(newPassword, 12);
-  user.passwordChangedAt = Date.now();
+  const match = await user.comparePassword(currentPassword);
+  if (!match)
+    return sendResponse(res, false, "Current password is incorrect", null, 401);
+
+  user.password = newPassword; // model hashes
   await user.save();
 
   sendResponse(res, true, "Password changed successfully");
 });
 
-/* =========================
-   FORGOT PASSWORD
-========================= */
+/* ================= FORGOT PASSWORD ================= */
 router.post("/forgot-password", async (req, res) => {
   const user = await User.findOne({ email: req.body.email.toLowerCase().trim() });
-  if (!user) return sendResponse(res, true, "If an account exists, a reset link was sent");
 
-  const resetToken = crypto.randomBytes(32).toString("hex");
-  user.resetToken = resetToken;
-  user.resetTokenExpiry = Date.now() + 3600000;
-  await user.save();
+  if (!user)
+    return sendResponse(res, true, "If an account exists, a reset link was sent");
+
+  const resetToken = await user.generateResetToken();
 
   console.log(`Reset link: ${process.env.FRONTEND_URL}/reset-password/${resetToken}`);
 
-  sendResponse(res, true, "Reset instructions sent", process.env.NODE_ENV === "development" ? { resetToken } : null);
+  sendResponse(
+    res,
+    true,
+    "Reset instructions sent",
+    process.env.NODE_ENV === "development" ? { resetToken } : null
+  );
 });
 
-/* =========================
-   RESET PASSWORD
-========================= */
+/* ================= RESET PASSWORD ================= */
 router.post("/reset-password/:token", async (req, res) => {
   const user = await User.findOne({
     resetToken: req.params.token,
     resetTokenExpiry: { $gt: Date.now() },
-  });
+  }).select("+password");
 
-  if (!user) return sendResponse(res, false, "Invalid or expired token", null, 400);
+  if (!user)
+    return sendResponse(res, false, "Invalid or expired token", null, 400);
+
   if (!req.body.password || req.body.password.length < 6)
     return sendResponse(res, false, "Password must be at least 6 characters", null, 400);
 
-  user.password = await bcrypt.hash(req.body.password, 12);
-  user.resetToken = undefined;
-  user.resetTokenExpiry = undefined;
-  await user.save();
+  user.password = req.body.password; // model hashes
+  await user.clearResetToken();
 
   sendResponse(res, true, "Password reset successful");
 });
 
-/* =========================
-   LOGOUT
-========================= */
+/* ================= LOGOUT ================= */
 router.post("/logout", auth, (req, res) => {
   sendResponse(res, true, "Logged out successfully");
 });

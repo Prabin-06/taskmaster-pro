@@ -14,43 +14,13 @@ export default function Signup() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
-  const [passwordStrength, setPasswordStrength] = useState(0);
+
   const navigate = useNavigate();
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
-
-    if (errors[name]) setErrors((prev) => ({ ...prev, [name]: "" }));
-
-    if (name === "password") calculatePasswordStrength(value);
-
-    if (name === "confirmPassword" && formData.password !== value) {
-      setErrors((prev) => ({ ...prev, confirmPassword: "Passwords do not match" }));
-    } else if (name === "confirmPassword") {
-      setErrors((prev) => ({ ...prev, confirmPassword: "" }));
-    }
-  };
-
-  const calculatePasswordStrength = (password) => {
-    let strength = 0;
-    if (password.length >= 8) strength++;
-    if (/[A-Z]/.test(password)) strength++;
-    if (/[a-z]/.test(password)) strength++;
-    if (/[0-9]/.test(password)) strength++;
-    if (/[^A-Za-z0-9]/.test(password)) strength++;
-    setPasswordStrength(strength);
-  };
-
-  const getPasswordStrengthInfo = () => {
-    const map = [
-      { color: "bg-red-500", text: "Very Weak", width: "20%" },
-      { color: "bg-orange-500", text: "Weak", width: "40%" },
-      { color: "bg-yellow-500", text: "Fair", width: "60%" },
-      { color: "bg-blue-500", text: "Good", width: "80%" },
-      { color: "bg-green-500", text: "Strong", width: "100%" },
-    ];
-    return map[Math.min(passwordStrength, 4)];
+    setErrors({});
   };
 
   const validateForm = () => {
@@ -86,46 +56,110 @@ export default function Signup() {
     }
   };
 
-  const PasswordToggle = ({ show, onClick }) => (
-    <button type="button" onClick={onClick} className="absolute right-3 top-1/2 -translate-y-1/2">
-      {show ? "🙈" : "👁️"}
-    </button>
-  );
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8 w-full max-w-lg">
-        <h1 className="text-3xl font-bold text-center mb-6">Create Account</h1>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-6">
+      <div className="w-full max-w-md">
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-bold text-gray-900">Create Account</h1>
+          <p className="text-gray-500 mt-2">Start managing your tasks today 🚀</p>
+        </div>
 
-        {errors.form && <p className="text-red-600 mb-4">{errors.form}</p>}
+        <div className="bg-white rounded-2xl shadow-lg border p-8">
+          {errors?.form && (
+            <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg border border-red-200">
+              {errors.form}
+            </div>
+          )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <input name="name" placeholder="Full Name" value={formData.name} onChange={handleChange} className="w-full p-3 border rounded-lg" />
-          <input name="email" type="email" placeholder="Email" value={formData.email} onChange={handleChange} className="w-full p-3 border rounded-lg" />
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div>
+              <label className="block text-sm font-medium mb-1">Full Name</label>
+              <input
+                name="name"
+                value={formData.name}
+                onChange={handleChange}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              {errors?.name && <p className="text-red-500 text-sm mt-1">{errors.name}</p>}
+            </div>
 
-          <div className="relative">
-            <input type={showPassword ? "text" : "password"} name="password" placeholder="Password" value={formData.password} onChange={handleChange} className="w-full p-3 border rounded-lg pr-10" />
-            <PasswordToggle show={showPassword} onClick={() => setShowPassword(!showPassword)} />
-          </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Email</label>
+              <input
+                name="email"
+                type="email"
+                value={formData.email}
+                onChange={handleChange}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              {errors?.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
+            </div>
 
-          <div className="relative">
-            <input type={showConfirmPassword ? "text" : "password"} name="confirmPassword" placeholder="Confirm Password" value={formData.confirmPassword} onChange={handleChange} className="w-full p-3 border rounded-lg pr-10" />
-            <PasswordToggle show={showConfirmPassword} onClick={() => setShowConfirmPassword(!showConfirmPassword)} />
-          </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Password</label>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  name="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg pr-10 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+                >
+                  {showPassword ? "🙈" : "👁️"}
+                </button>
+              </div>
+              {errors?.password && <p className="text-red-500 text-sm mt-1">{errors.password}</p>}
+            </div>
 
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={agreeTerms} onChange={(e) => setAgreeTerms(e.target.checked)} />
-            I agree to the terms
-          </label>
+            <div>
+              <label className="block text-sm font-medium mb-1">Confirm Password</label>
+              <div className="relative">
+                <input
+                  type={showConfirmPassword ? "text" : "password"}
+                  name="confirmPassword"
+                  value={formData.confirmPassword}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg pr-10 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+                >
+                  {showConfirmPassword ? "🙈" : "👁️"}
+                </button>
+              </div>
+              {errors?.confirmPassword && (
+                <p className="text-red-500 text-sm mt-1">{errors.confirmPassword}</p>
+              )}
+            </div>
 
-          <button disabled={loading} className="w-full bg-blue-600 text-white py-3 rounded-lg">
-            {loading ? "Creating..." : "Sign Up"}
-          </button>
-        </form>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={agreeTerms} onChange={(e) => setAgreeTerms(e.target.checked)} />
+              I agree to the terms and conditions
+            </label>
+            {errors?.terms && <p className="text-red-500 text-sm">{errors.terms}</p>}
 
-        <p className="text-center mt-4">
-          Already have an account? <Link to="/login" className="text-blue-600">Login</Link>
-        </p>
+            <button
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3 rounded-lg font-semibold shadow hover:opacity-90 transition disabled:opacity-50"
+            >
+              {loading ? "Creating account..." : "Sign Up"}
+            </button>
+          </form>
+
+          <p className="text-center mt-6 text-sm text-gray-600">
+            Already have an account?{" "}
+            <Link to="/login" className="text-blue-600 hover:underline">
+              Login
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   );

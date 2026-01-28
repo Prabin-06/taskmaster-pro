@@ -1,35 +1,45 @@
-require("dotenv").config()
+require("dotenv").config();
+const express = require("express");
+const mongoose = require("mongoose");
+const cors = require("cors");
 
+const authRoutes = require("./routes/auth");
+const taskRoutes = require("./routes/task");
 
-const express = require("express")
-const mongoose = require("mongoose")
-const cors = require("cors")
-require("dotenv").config()
-const authRoutes = require("./routes/auth")
-const taskRoutes = require("./routes/task")
+const app = express();
 
-const app = express()
+/* ================= MIDDLEWARE ================= */
+app.use(cors({
+  origin: process.env.FRONTEND_URL,
+  credentials: true,
+}));
 
-app.use(cors())
-app.use(express.json())
+app.use(express.json());
 
-app.use("/api/auth", authRoutes)
-app.use("/api/task", taskRoutes)
+/* ================= ROUTES ================= */
+app.use("/api/auth", authRoutes);
+app.use("/api/task", taskRoutes);
 
-const auth = require("./middleware/authMiddleware")
-
-app.get("/api/private", auth, (req, res) => {
-  res.json({ message: "You are authorized 🎉", userId: req.user.id })
-})
-
+/* ================= HEALTH CHECK ================= */
 app.get("/", (req, res) => {
-  res.send("Task Manager API running 🚀")
-})
+  res.send("API is running 🚀");
+});
 
+/* ================= ERROR HANDLER ================= */
+app.use((err, req, res, next) => {
+  console.error("Server error:", err);
+  res.status(500).json({ message: "Server error" });
+});
+
+/* ================= DATABASE ================= */
+mongoose
+  .connect(process.env.MONGO_URI)
+  .then(() => console.log("✅ MongoDB Connected"))
+  .catch((err) => {
+    console.error("❌ MongoDB Connection Failed:", err.message);
+    process.exit(1);
+  });
+
+/* ================= START SERVER ================= */
 const PORT = process.env.PORT || 5000;
-
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => {
-    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-  })
-  .catch(err => console.log(err));
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
