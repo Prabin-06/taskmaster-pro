@@ -1,55 +1,51 @@
 const express = require("express")
 const bcrypt = require("bcryptjs")
-const User = require("../models/User")
 const jwt = require("jsonwebtoken")
+const crypto = require("crypto")
+const User = require("../models/User")
 
 const router = express.Router()
 
-// ✅ SIGNUP (FIXED: was /register, now /signup)
+// ✅ SIGNUP
 router.post("/signup", async (req, res) => {
   console.log("SIGNUP BODY RECEIVED:", req.body)
+
   try {
     const { name, email, password } = req.body
-   
 
-//router.post("/signup", async (req, res) => {
-  //try {
-    //const { name, email, password } = req.body
-
-    // Basic validation
     if (!name || !email || !password) {
       return res.status(400).json({ message: "All fields are required" })
     }
 
     if (password.length < 6) {
-      return res.status(400).json({ message: "Password must be at least 6 characters long" })
+      return res
+        .status(400)
+        .json({ message: "Password must be at least 6 characters long" })
     }
 
-    // Check if user already exists
     const existingUser = await User.findOne({ email })
     if (existingUser) {
       return res.status(400).json({ message: "User already exists" })
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10)
 
     const user = new User({
       name,
       email,
-      password: hashedPassword
+      password: hashedPassword,
     })
 
     await user.save()
 
-    // Success response
     res.status(201).json({ message: "User registered successfully" })
   } catch (err) {
     res.status(500).json({ message: err.message })
   }
 })
 
-// ✅ LOGIN (unchanged, already correct)
+
+// ✅ LOGIN
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body
@@ -80,9 +76,56 @@ router.post("/login", async (req, res) => {
       user: {
         id: user._id,
         name: user.name,
-        email: user.email
-      }
+        email: user.email,
+      },
     })
+  } catch (err) {
+    res.status(500).json({ message: err.message })
+  }
+})
+
+
+// 🔑 FORGOT PASSWORD
+router.post("/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body
+
+    const user = await User.findOne({ email })
+    if (!user) {
+      return res.status(404).json({ message: "User not found" })
+    }
+
+    const resetToken = crypto.randomBytes(20).toString("hex")
+    user.resetToken = resetToken
+    await user.save()
+
+    res.json({
+      message: "Reset token generated",
+      resetToken, // In real apps this is emailed
+    })
+  } catch (err) {
+    res.status(500).json({ message: err.message })
+  }
+})
+
+
+// 🔁 RESET PASSWORD
+router.post("/reset-password/:token", async (req, res) => {
+  try {
+    const { password } = req.body
+
+    const user = await User.findOne({ resetToken: req.params.token })
+    if (!user) {
+      return res.status(400).json({ message: "Invalid or expired token" })
+    }
+
+    const salt = await bcrypt.genSalt(10)
+    user.password = await bcrypt.hash(password, salt)
+    user.resetToken = undefined
+
+    await user.save()
+
+    res.json({ message: "Password reset successful" })
   } catch (err) {
     res.status(500).json({ message: err.message })
   }
