@@ -26,13 +26,11 @@ export default function Dashboard() {
       return
     }
 
-    if (storedUser) {
-      setUser(JSON.parse(storedUser))
-    }
-
+    if (storedUser) setUser(JSON.parse(storedUser))
     setReady(true)
   }, [navigate])
-  /* SYNC USER ON UPDATE */
+
+  /* 🔥 LIVE USER SYNC (when name changes in profile) */
   useEffect(() => {
     const syncUser = () => {
       const storedUser = localStorage.getItem("user")
@@ -42,7 +40,6 @@ export default function Dashboard() {
     window.addEventListener("userUpdated", syncUser)
     return () => window.removeEventListener("userUpdated", syncUser)
   }, [])
-
 
   /* FETCH TASKS */
   const fetchTasks = async () => {
@@ -128,8 +125,7 @@ export default function Dashboard() {
 
           <div className="flex items-center gap-4 mt-4 md:mt-0">
 
-            {/* Avatar */}
-
+            {/* 🔵 AVATAR */}
             <Link to="/profile">
               <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white flex items-center justify-center font-bold shadow-md hover:scale-105 transition">
                 {user?.name ? user.name.charAt(0).toUpperCase() : "U"}
@@ -144,7 +140,6 @@ export default function Dashboard() {
               className="px-4 py-2 border rounded-full"
             />
 
-            {/* PROFILE FIRST */}
             <Link
               to="/profile"
               className="text-sm font-medium text-amber-600 hover:underline"
@@ -152,7 +147,6 @@ export default function Dashboard() {
               Profile
             </Link>
 
-            {/* LOGOUT */}
             <button
               onClick={() => {
                 localStorage.clear()
