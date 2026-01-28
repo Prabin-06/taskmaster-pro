@@ -1,15 +1,26 @@
 import { useState } from "react"
 import api from "../api"
+import { useNavigate } from "react-router-dom"
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("")
   const [message, setMessage] = useState("")
 
+
+  const navigate = useNavigate()
+
   const handleSubmit = async (e) => {
     e.preventDefault()
-    const res = await api.post("/api/auth/forgot-password", { email })
-    setMessage("Reset token: " + res.data.resetToken)
+    try {
+      const res = await api.post("/api/auth/forgot-password", { email })
+
+      // 🚀 Auto redirect to reset page with token
+      navigate(`/reset-password/${res.data.resetToken}`)
+    } catch (err) {
+      setMessage(err.response?.data?.message || "Error sending reset link")
+    }
   }
+
 
   return (
     <div className="min-h-screen flex items-center justify-center">
