@@ -2,7 +2,7 @@
 import axios from "axios"
 
 const api = axios.create({
-  baseURL: "http://localhost:5000", // change if deployed
+  baseURL: "https://taskmaster-pro-1.onrender.com", // change if deployed
 })
 
 // Attach token automatically
